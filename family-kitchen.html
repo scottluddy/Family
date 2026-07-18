@@ -101,8 +101,8 @@
    Fill these in with your project's values (Project Settings > API in Supabase).
    The anon key is safe to expose in client-side code — it only has the
    permissions your Row Level Security policies grant it. */
-const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
-const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+const SUPABASE_URL = "https://wbotaefcsxxlvbytmpxh.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_e1TCH4HPHgxASiYOa6zmyg_X4LmufIJ";
 
 const supabaseConfigured = SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL" && SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY";
 const db = supabaseConfigured ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
