@@ -452,6 +452,11 @@ const state = {
   familyStatus: "resolving", // "resolving" | "ready" | "needs-family-name" | "error"
   familyMembers: [], // [{id, email, status, user_id}]
   inviteEmailInput: "",
+  newPassword: "",
+  confirmNewPassword: "",
+  passwordChangeError: "",
+  passwordChangeSuccess: "",
+  passwordChangeLoading: false,
   hiddenModules: [], // module target keys hidden from the home screen, per-user preference
   moduleUnseen: {}, // { target: true } for modules with changes since this user last viewed them
 };
@@ -623,6 +628,34 @@ async function loadFamilyMembers(){
   if (!state.familyId) return;
   const { data } = await db.from("family_members").select("id, email, status").eq("family_id", state.familyId).order("created_at");
   state.familyMembers = data || [];
+}
+
+async function changePassword(){
+  state.passwordChangeError = "";
+  state.passwordChangeSuccess = "";
+  if (!state.newPassword || state.newPassword.length < 6){
+    state.passwordChangeError = "Password should be at least 6 characters.";
+    render();
+    return;
+  }
+  if (state.newPassword !== state.confirmNewPassword){
+    state.passwordChangeError = "Passwords don't match.";
+    render();
+    return;
+  }
+  state.passwordChangeLoading = true;
+  render();
+  try{
+    const { error } = await db.auth.updateUser({ password: state.newPassword });
+    if (error) throw error;
+    state.newPassword = "";
+    state.confirmNewPassword = "";
+    state.passwordChangeSuccess = "Password updated.";
+  }catch(e){
+    state.passwordChangeError = "Couldn't update your password — please try again.";
+  }
+  state.passwordChangeLoading = false;
+  render();
 }
 
 async function addFamilyMemberInvite(){
@@ -1517,6 +1550,15 @@ function renderAccount(){
         <div class="recipe-section-label" style="margin-top:24px;">Home Screen Modules</div>
         <div style="background:#fff; border:1px solid var(--line); border-radius:14px; padding:2px 14px;">${toggleRows}</div>
 
+        <div class="recipe-section-label" style="margin-top:24px;">Change Password</div>
+        <div style="background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px;">
+          <input class="form-input" type="password" autocomplete="new-password" placeholder="New password" value="${escapeHtml(state.newPassword)}" data-role="new-password-input" ${state.passwordChangeLoading ? "disabled" : ""} />
+          <input class="form-input" type="password" autocomplete="new-password" placeholder="Confirm new password" value="${escapeHtml(state.confirmNewPassword)}" data-role="confirm-new-password-input" style="margin-top:10px;" ${state.passwordChangeLoading ? "disabled" : ""} />
+          ${state.passwordChangeError ? `<div style="color:var(--red); font-size:13px; font-weight:600; margin-top:10px;">${escapeHtml(state.passwordChangeError)}</div>` : ""}
+          ${state.passwordChangeSuccess ? `<div style="color:#3B7D54; font-size:13px; font-weight:600; margin-top:10px;">${escapeHtml(state.passwordChangeSuccess)}</div>` : ""}
+          <button class="btn-primary" style="background:var(--navy); width:100%; margin-top:12px;" data-action="submit-password-change" ${state.passwordChangeLoading ? "disabled" : ""}>${state.passwordChangeLoading ? "Updating…" : "Update Password"}</button>
+        </div>
+
         <button class="btn-danger" style="width:100%; margin-top:28px;" data-action="logout">Sign Out</button>
       </div>
     </div>`;
@@ -2171,6 +2213,7 @@ document.addEventListener("click", (e) => {
   else if (action === "submit-create-family") submitCreateFamily();
   else if (action === "add-invite") addFamilyMemberInvite();
   else if (action === "remove-invite") removeFamilyMemberInvite(el.dataset.id);
+  else if (action === "submit-password-change") changePassword();
   else if (action === "logout") logout();
   else if (action === "calendar-today") jumpToCurrentMonth();
   else if (action === "open-day") openDay(el.dataset.date);
@@ -2192,6 +2235,10 @@ document.addEventListener("input", (e) => {
     state.signupFamilyName = el.value;
   } else if (el.dataset.role === "invite-email-input"){
     state.inviteEmailInput = el.value;
+  } else if (el.dataset.role === "new-password-input"){
+    state.newPassword = el.value;
+  } else if (el.dataset.role === "confirm-new-password-input"){
+    state.confirmNewPassword = el.value;
   } else if (el.dataset.role === "meal-draft-input"){
     state.mealDraftText = el.value;
   } else if (el.dataset.role === "add-item-input"){
@@ -2243,6 +2290,8 @@ document.addEventListener("keydown", (e) => {
     else attemptSignup();
   } else if (el.dataset.role === "invite-email-input" && e.key === "Enter" && state.inviteEmailInput.trim()){
     addFamilyMemberInvite();
+  } else if ((el.dataset.role === "new-password-input" || el.dataset.role === "confirm-new-password-input") && e.key === "Enter"){
+    changePassword();
   } else if (el.dataset.role === "add-item-input" && e.key === "Enter" && state.groceryInput.trim()){
     submitItem(state.groceryInput);
   } else if (el.dataset.role === "new-list-input"){
