@@ -148,16 +148,16 @@
   .todo-tab{ flex:1; text-align:center; font-weight:700; font-size:14px; padding:10px; border-radius:12px; cursor:pointer; background:#fff; color:var(--text); border:1px solid var(--line); }
   .todo-tab.active{ background:#7B5EA7; color:#fff; border:1px solid #7B5EA7; }
 
-  .calendar-header{ display:flex; align-items:center; justify-content:space-between; padding:4px 20px 14px; gap:10px; }
-  .calendar-nav-group{ display:flex; align-items:center; gap:6px; }
-  .calendar-nav-btn{ width:32px; height:32px; border-radius:10px; border:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; flex-shrink:0; }
-  .calendar-month-title{ font-family:'Baloo 2', sans-serif; font-size:18px; font-weight:700; color:var(--text); flex:1; text-align:center; }
+  .calendar-page{ display:flex; flex-direction:column; height:100vh; box-sizing:border-box; }
   .calendar-today-btn{ font-size:12px; font-weight:700; color:#1F8A8C; background:#E9F5F5; border:1px solid #BFE3E3; border-radius:999px; padding:6px 12px; cursor:pointer; white-space:nowrap; }
+  .calendar-scroll{ flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:30px; }
+  .calendar-month-block{ margin-bottom:8px; }
+  .calendar-month-title{ font-family:'Baloo 2', sans-serif; font-size:16px; font-weight:700; color:var(--text); padding:6px 20px 10px; }
 
-  .calendar-weekday-row{ display:grid; grid-template-columns:repeat(7,1fr); padding:0 20px; margin-bottom:4px; }
+  .calendar-weekday-row{ display:grid; grid-template-columns:repeat(7,1fr); padding:0 20px; margin-bottom:4px; flex-shrink:0; }
   .calendar-weekday{ text-align:center; font-size:11px; font-weight:800; letter-spacing:0.3px; color:var(--muted); }
 
-  .calendar-grid-wrap{ margin:0 20px 30px; border-top:1px solid var(--line); border-left:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff; }
+  .calendar-grid-wrap{ margin:0 20px 6px; border-top:1px solid var(--line); border-left:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff; }
   .calendar-week{ position:relative; min-height:56px; }
   .calendar-day-bg{ position:absolute; top:0; bottom:0; border-right:1px solid var(--line); border-bottom:1px solid var(--line); cursor:pointer; z-index:0; }
   .calendar-day-bg.other-month{ opacity:0.38; }
@@ -308,6 +308,18 @@ function addDays(date, n){
   d.setDate(d.getDate() + n);
   return d;
 }
+function addMonthOffset(year, monthIndex, offset){
+  let m = monthIndex + offset, y = year;
+  while (m < 0){ m += 12; y -= 1; }
+  while (m > 11){ m -= 12; y += 1; }
+  return { year: y, monthIndex: m };
+}
+function buildInitialCalendarMonths(){
+  const now = new Date();
+  const arr = [];
+  for (let i = -1; i <= 2; i++){ arr.push(addMonthOffset(now.getFullYear(), now.getMonth(), i)); }
+  return arr;
+}
 // Returns an array of weeks (each an array of 7 Date objects) covering the full
 // grid for a given month, including the leading/trailing days from adjacent
 // months needed to fill out complete weeks.
@@ -373,8 +385,13 @@ const state = {
   todoInput: "",
 
   // Calendar module
-  calendarYear: new Date().getFullYear(),
-  calendarMonthIndex: new Date().getMonth(),
+  calendarMonths: (() => {
+    const now = new Date();
+    const arr = [];
+    for (let i = -1; i <= 2; i++){ arr.push(addMonthOffset(now.getFullYear(), now.getMonth(), i)); }
+    return arr;
+  })(),
+  calendarScrollToKey: null, // "year-monthIndex" to scroll into view after next render, else null
   events: [],
   calendarSelectedDate: null, // dateKey when the day overlay is open, else null
   dayOverlayMode: "list", // "list" | "form"
@@ -429,6 +446,11 @@ async function logout(){
 
 function navigate(target){
   state.view = target;
+  if (target === "calendar"){
+    state.calendarMonths = buildInitialCalendarMonths();
+    const now = new Date();
+    state.calendarScrollToKey = `${now.getFullYear()}-${now.getMonth()}`;
+  }
   render();
 }
 
@@ -980,21 +1002,47 @@ async function removeTodoItem(id){
 
 /* ---------- calendar ---------- */
 
-function navigateCalendarMonth(delta){
-  let m = state.calendarMonthIndex + delta;
-  let y = state.calendarYear;
-  if (m < 0) { m = 11; y -= 1; }
-  if (m > 11) { m = 0; y += 1; }
-  state.calendarMonthIndex = m;
-  state.calendarYear = y;
-  render();
-}
 function jumpToCurrentMonth(){
+  state.calendarMonths = buildInitialCalendarMonths();
   const now = new Date();
-  state.calendarYear = now.getFullYear();
-  state.calendarMonthIndex = now.getMonth();
+  state.calendarScrollToKey = `${now.getFullYear()}-${now.getMonth()}`;
   render();
 }
+
+let calendarLoadingMore = false;
+function handleCalendarScroll(e){
+  if (calendarLoadingMore) return;
+  const el = e.target;
+  const nearTop = el.scrollTop < 400;
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 400;
+  if (!nearTop && !nearBottom) return;
+
+  calendarLoadingMore = true;
+  const oldScrollTop = el.scrollTop;
+  const oldScrollHeight = el.scrollHeight;
+
+  if (nearTop){
+    const first = state.calendarMonths[0];
+    const added = [addMonthOffset(first.year, first.monthIndex, -2), addMonthOffset(first.year, first.monthIndex, -1)];
+    state.calendarMonths = [...added, ...state.calendarMonths];
+    render();
+    requestAnimationFrame(() => {
+      const newEl = document.getElementById("calendar-scroll");
+      if (newEl){
+        const heightDiff = newEl.scrollHeight - oldScrollHeight;
+        newEl.scrollTop = oldScrollTop + heightDiff;
+      }
+      calendarLoadingMore = false;
+    });
+  } else {
+    const last = state.calendarMonths[state.calendarMonths.length - 1];
+    const added = [addMonthOffset(last.year, last.monthIndex, 1), addMonthOffset(last.year, last.monthIndex, 2)];
+    state.calendarMonths = [...state.calendarMonths, ...added];
+    render();
+    requestAnimationFrame(() => { calendarLoadingMore = false; });
+  }
+}
+
 function openDay(dateKey){
   state.calendarSelectedDate = dateKey;
   state.dayOverlayMode = "list";
@@ -1111,6 +1159,16 @@ function render(){
     const el = app.querySelector(state.pendingFocus);
     if (el){ el.focus(); if (el.value) el.setSelectionRange(el.value.length, el.value.length); }
     state.pendingFocus = null;
+  }
+
+  const calendarScrollEl = document.getElementById("calendar-scroll");
+  if (calendarScrollEl){
+    calendarScrollEl.addEventListener("scroll", handleCalendarScroll);
+    if (state.calendarScrollToKey){
+      const target = calendarScrollEl.querySelector(`[data-month-key="${state.calendarScrollToKey}"]`);
+      if (target) target.scrollIntoView({ block: "start" });
+      state.calendarScrollToKey = null;
+    }
   }
 }
 
@@ -1584,13 +1642,8 @@ function assignLanes(segments){
   return segments;
 }
 
-function renderCalendar(){
-  const year = state.calendarYear;
-  const monthIndex = state.calendarMonthIndex;
+function renderMonthBlock(year, monthIndex, todayKey){
   const weeks = buildMonthWeeks(year, monthIndex);
-  const todayKey = isoDate(new Date());
-
-  const weekdayRow = `<div class="calendar-weekday-row">${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join("")}</div>`;
 
   const weeksHtml = weeks.map(week => {
     const weekStartKey = isoDate(week[0]);
@@ -1634,22 +1687,25 @@ function renderCalendar(){
   }).join("");
 
   return `
-    <div class="view-wrap">
+    <div class="calendar-month-block" data-month-key="${year}-${monthIndex}">
+      <div class="calendar-month-title">${MONTH_FULL_NAMES[monthIndex]} ${year}</div>
+      <div class="calendar-grid-wrap">${weeksHtml}</div>
+    </div>`;
+}
+
+function renderCalendar(){
+  const todayKey = isoDate(new Date());
+  const weekdayRow = `<div class="calendar-weekday-row">${WEEKDAY_LABELS.map(l => `<div class="calendar-weekday">${l}</div>`).join("")}</div>`;
+  const monthsHtml = state.calendarMonths.map(m => renderMonthBlock(m.year, m.monthIndex, todayKey)).join("");
+
+  return `
+    <div class="view-wrap calendar-page">
       ${renderBackHeader("Calendar", "#1F8A8C")}
-      <div class="calendar-header">
-        <div class="calendar-nav-group">
-          <button class="calendar-nav-btn" data-action="calendar-prev" aria-label="Previous month">${ICONS.chevronLeft}</button>
-        </div>
-        <div class="calendar-month-title">${MONTH_FULL_NAMES[monthIndex]} ${year}</div>
-        <div class="calendar-nav-group">
-          <button class="calendar-nav-btn" data-action="calendar-next" aria-label="Next month">${ICONS.chevronRightSmall}</button>
-        </div>
-      </div>
-      <div style="text-align:center; margin-bottom:10px;">
+      <div style="text-align:center; margin:0 0 10px;">
         <button class="calendar-today-btn" data-action="calendar-today">Today</button>
       </div>
       ${weekdayRow}
-      <div class="calendar-grid-wrap">${weeksHtml}</div>
+      <div class="calendar-scroll" id="calendar-scroll">${monthsHtml}</div>
     </div>`;
 }
 
@@ -1799,8 +1855,6 @@ document.addEventListener("click", (e) => {
   else if (action === "remove-todo") removeTodoItem(el.dataset.id);
   else if (action === "submit-login") attemptLogin();
   else if (action === "logout") logout();
-  else if (action === "calendar-prev") navigateCalendarMonth(-1);
-  else if (action === "calendar-next") navigateCalendarMonth(1);
   else if (action === "calendar-today") jumpToCurrentMonth();
   else if (action === "open-day") openDay(el.dataset.date);
   else if (action === "close-day-overlay") closeDayOverlay();
