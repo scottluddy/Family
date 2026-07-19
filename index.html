@@ -186,7 +186,7 @@ let lastLocalWriteAt = 0;
    instructions) for much more reliable recipe imports from URLs. If left as the
    placeholder, recipe import falls back to free public proxies only, which many
    major recipe sites block. */
-const RECIPE_PROXY_URL = "YOUR_CLOUDFLARE_WORKER_URL";
+const RECIPE_PROXY_URL = "https://recipe-fetch-proxy.scottiematrx.workers.dev/";
 const recipeProxyConfigured = RECIPE_PROXY_URL !== "YOUR_CLOUDFLARE_WORKER_URL";
 
 /* ---------- constants ---------- */
