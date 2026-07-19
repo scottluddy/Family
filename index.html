@@ -63,7 +63,8 @@
   .login-title{ font-family:'Baloo 2', sans-serif; font-size:26px; font-weight:700; color:var(--text); text-align:center; margin:6px 0 28px; }
   .login-card{ background:#fff; border:1px solid var(--line); border-radius:18px; padding:22px; }
   .logout-link{ display:block; text-align:center; margin:8px auto 0; font-size:13px; font-weight:700; color:var(--muted); background:none; border:none; cursor:pointer; padding:10px; }
-  .app-tile{ aspect-ratio:1; width:100%; border:none; border-radius:22px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; cursor:pointer; box-shadow:0 6px 16px rgba(43,69,112,0.14); padding:14px; text-align:center; }
+  .app-tile{ position:relative; aspect-ratio:1; width:100%; border:none; border-radius:22px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; cursor:pointer; box-shadow:0 6px 16px rgba(43,69,112,0.14); padding:14px; text-align:center; }
+  .tile-badge{ position:absolute; top:12px; right:12px; width:13px; height:13px; border-radius:999px; background:#E8544A; border:2px solid #fff; }
   .app-tile-icon{ width:52px; height:52px; border-radius:14px; background:rgba(255,255,255,0.18); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .app-tile-label{ font-family:'Baloo 2', sans-serif; font-size:15px; font-weight:700; color:#fff; line-height:1.2; }
 
@@ -237,6 +238,18 @@ const CATEGORIES = [
 const CATEGORY_ORDER = CATEGORIES.map(c => c.key);
 
 const EVENT_COLORS = ["#2B4570", "#FF8C42", "#4C9A6A", "#7B5EA7", "#E8544A", "#1F8A8C", "#D98E3B"];
+
+const MODULE_KEY_PREFIXES = [
+  { prefix: "mealplan", target: "meal" },
+  { prefix: "grocery", target: "grocery" },
+  { prefix: "recipes", target: "recipes" },
+  { prefix: "todo-items", target: "todo" },
+  { prefix: "calendar-events", target: "calendar" },
+];
+function moduleForKey(key){
+  const hit = MODULE_KEY_PREFIXES.find(m => key.startsWith(m.prefix));
+  return hit ? hit.target : null;
+}
 function colorForNewEvent(){ return EVENT_COLORS[state.events.length % EVENT_COLORS.length]; }
 function categoryInfo(key){ return CATEGORIES.find(c => c.key === key) || CATEGORIES[CATEGORIES.length - 1]; }
 
@@ -440,6 +453,7 @@ const state = {
   familyMembers: [], // [{id, email, status, user_id}]
   inviteEmailInput: "",
   hiddenModules: [], // module target keys hidden from the home screen, per-user preference
+  moduleUnseen: {}, // { target: true } for modules with changes since this user last viewed them
 };
 
 /* ---------- auth ---------- */
@@ -523,6 +537,7 @@ async function logout(){
   state.familyStatus = "resolving";
   state.familyMembers = [];
   state.hiddenModules = [];
+  state.moduleUnseen = {};
   render();
 }
 
@@ -640,6 +655,33 @@ async function toggleModuleVisibility(target){
   }
 }
 
+// Compares each module's most recent data change against when this user last viewed it,
+// to decide which home-screen tiles should show a "something's new" badge.
+async function refreshModuleBadges(){
+  if (!db || !state.familyId || !state.session) { state.moduleUnseen = {}; return; }
+  const { data, error } = await db.from("family_kitchen_kv").select("key, updated_at").eq("family_id", state.familyId);
+  if (error || !data) return;
+  const lastSeen = (state.session.user.user_metadata && state.session.user.user_metadata.moduleLastSeen) || {};
+  const unseen = {};
+  for (const row of data){
+    const target = moduleForKey(row.key);
+    if (!target) continue;
+    const updatedAt = new Date(row.updated_at).getTime();
+    const seenAt = lastSeen[target] ? new Date(lastSeen[target]).getTime() : 0;
+    if (updatedAt > seenAt) unseen[target] = true;
+  }
+  state.moduleUnseen = unseen;
+}
+
+async function markModuleSeen(target){
+  if (!HOME_MODULES.some(m => m.target === target)) return;
+  state.moduleUnseen[target] = false;
+  if (!db || !state.session) return;
+  const nextLastSeen = { ...((state.session.user.user_metadata && state.session.user.user_metadata.moduleLastSeen) || {}), [target]: new Date().toISOString() };
+  state.session.user.user_metadata.moduleLastSeen = nextLastSeen; // keep local copy fresh for this session
+  await db.auth.updateUser({ data: { moduleLastSeen: nextLastSeen } });
+}
+
 /* ---------- data actions ---------- */
 
 function navigate(target){
@@ -648,6 +690,10 @@ function navigate(target){
     state.calendarMonths = buildInitialCalendarMonths();
     const now = new Date();
     state.calendarScrollToKey = `${now.getFullYear()}-${now.getMonth()}`;
+  }
+  if (state.moduleUnseen[target]){
+    state.moduleUnseen[target] = false;
+    markModuleSeen(target);
   }
   render();
 }
@@ -1401,6 +1447,7 @@ function renderHome(){
   const visibleModules = HOME_MODULES.filter(m => !state.hiddenModules.includes(m.target));
   const tiles = visibleModules.map(m => `
     <button class="app-tile" style="background:${m.color}" data-action="nav" data-target="${m.target}">
+      ${state.moduleUnseen[m.target] ? `<span class="tile-badge"></span>` : ""}
       <div class="app-tile-icon">${m.icon}</div>
       <div class="app-tile-label">${m.label}</div>
     </button>`).join("");
@@ -2282,6 +2329,7 @@ async function loadAllData(){
 
 async function finishStartup(){
   await loadAllData();
+  await refreshModuleBadges();
   state.ready = true;
   render();
 
@@ -2290,10 +2338,20 @@ async function finishStartup(){
       .on("postgres_changes", {
         event: "*", schema: "public", table: "family_kitchen_kv",
         ...(state.familyId ? { filter: `family_id=eq.${state.familyId}` } : {}),
-      }, () => {
+      }, (payload) => {
         // Ignore events caused by our own recent writes to avoid clobbering in-progress typing.
         if (Date.now() - lastLocalWriteAt < 800) return;
-        loadAllData().then(render);
+        loadAllData().then(async () => {
+          await refreshModuleBadges();
+          // If we're currently looking at the module that just changed, we've already
+          // seen it live — no need to show a badge for it once we head back to the home screen.
+          const changedRow = payload.new || payload.old;
+          const changedModule = changedRow ? moduleForKey(changedRow.key) : null;
+          if (changedModule && state.view === changedModule){
+            await markModuleSeen(changedModule);
+          }
+          render();
+        });
       })
       .subscribe();
   }
