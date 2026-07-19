@@ -484,7 +484,10 @@ async function attemptSignup(){
   try{
     const { data, error } = await db.auth.signUp({
       email, password,
-      options: { data: { pendingFamilyName: familyName } },
+      options: {
+        data: { pendingFamilyName: familyName },
+        emailRedirectTo: window.location.href.split("#")[0].split("?")[0],
+      },
     });
     if (error) throw error;
     state.loginLoading = false;
