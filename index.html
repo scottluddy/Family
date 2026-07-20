@@ -71,6 +71,7 @@
   .view-wrap{ max-width:480px; margin:0 auto; width:100%; }
   .header{ display:flex; align-items:center; justify-content:space-between; padding:20px 16px 12px; }
   .back-btn{ width:36px; height:36px; border-radius:12px; border:1px solid var(--line); background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .header-save-btn{ font-family:'Baloo 2', sans-serif; font-size:14px; font-weight:700; color:#fff; background:#7B5EA7; border:none; border-radius:10px; padding:8px 16px; cursor:pointer; white-space:nowrap; }
   .header-title{ font-family:'Baloo 2', sans-serif; font-size:22px; font-weight:700; }
 
   .day-list{ padding:4px 20px 40px; display:flex; flex-direction:column; gap:10px; }
@@ -1982,10 +1983,10 @@ function renderRecipeEditorOverlay(){
     `}
     <div style="display:flex; flex-direction:column; gap:8px;">${instructionsHtml}</div>
 
+    ${!isNew ? `
     <div class="recipe-footer-actions">
-      <button class="btn-primary" data-action="save-recipe">Save Recipe</button>
-      ${!isNew ? `<button class="btn-danger" data-action="delete-recipe" data-id="${state.recipeEditingId}">${ICONS.trash}</button>` : ""}
-    </div>`;
+      <button class="btn-danger" style="width:100%; display:inline-flex; align-items:center; justify-content:center; gap:6px;" data-action="delete-recipe" data-id="${state.recipeEditingId}">${ICONS.trash} Delete Recipe</button>
+    </div>` : ""}`;
 
   return `
     <div class="picker-overlay" style="align-items:stretch;">
@@ -1993,7 +1994,7 @@ function renderRecipeEditorOverlay(){
         <div class="header" style="padding:16px 20px 12px;">
           <button class="back-btn" data-action="back-from-recipe-editor" aria-label="Back">${ICONS.arrowLeft}</button>
           <div class="header-title" style="color:#7B5EA7">${isNew ? "New Recipe" : "Edit Recipe"}</div>
-          <div style="width:36px"></div>
+          ${showUrlMode ? `<div style="width:36px"></div>` : `<button class="header-save-btn" data-action="save-recipe">Save</button>`}
         </div>
         <div class="recipe-form" style="padding:0 20px 40px; overflow-y:auto; flex:1;">
           ${modeTabsHtml}
