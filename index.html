@@ -1313,6 +1313,8 @@ function openCalendarNotifications(){
 }
 function closeCalendarNotifications(){
   state.calendarNotifOpen = false;
+  const now = new Date();
+  state.calendarScrollToKey = `${now.getFullYear()}-${now.getMonth()}`;
   render();
 }
 async function clearCalendarNotifications(){
