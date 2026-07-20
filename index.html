@@ -1416,9 +1416,16 @@ function render(){
 
   const calendarScrollEl = document.getElementById("calendar-scroll");
   if (calendarScrollEl && state.calendarScrollToKey){
-    const target = calendarScrollEl.querySelector(`[data-month-key="${state.calendarScrollToKey}"]`);
-    if (target) target.scrollIntoView({ block: "start" });
+    const keyToFind = state.calendarScrollToKey;
     state.calendarScrollToKey = null;
+    // Wait for layout of the newly-inserted months to fully settle before scrolling,
+    // otherwise the browser can compute the wrong position and land at the top.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const target = calendarScrollEl.querySelector(`[data-month-key="${keyToFind}"]`);
+        if (target) target.scrollIntoView({ block: "start" });
+      });
+    });
   }
 }
 
@@ -1648,8 +1655,8 @@ function renderMealDayOverlay(){
 
   return `
     <div class="picker-overlay" style="align-items:stretch;">
-      <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column;">
-        <div class="header" style="padding:4px 0 12px;">
+      <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column; overflow:hidden; padding:0;">
+        <div class="header" style="padding:16px 20px 12px;">
           <button class="back-btn" data-action="close-meal-day" aria-label="Back">${ICONS.arrowLeft}</button>
           <div class="header-title" style="color:var(--navy); font-size:17px;">${niceDate}</div>
           <div style="width:36px"></div>
@@ -1686,7 +1693,7 @@ function renderGrocery(){
   const items = state.itemsByList[activeList] || [];
   const library = state.libraryByList[activeList] || [];
   const unchecked = items.filter(i => !i.checked);
-  const checked = items.filter(i => i.checked);
+  const checked = items.filter(i => i.checked).sort((a, b) => a.name.localeCompare(b.name));
 
   let tabs = "";
   state.lists.forEach(l => {
@@ -1827,13 +1834,13 @@ function renderRecipeEditorOverlay(){
 
     return `
       <div class="picker-overlay" style="align-items:stretch;">
-        <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column;">
-          <div class="header" style="padding:4px 0 12px;">
+        <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column; overflow:hidden; padding:0;">
+          <div class="header" style="padding:16px 20px 12px;">
             <button class="back-btn" data-action="close-recipe-editor" aria-label="Close">${ICONS.arrowLeft}</button>
             <div class="header-title" style="color:#7B5EA7">Recipe</div>
             <div style="width:36px"></div>
           </div>
-          <div class="recipe-form" style="padding:0; overflow-y:auto; flex:1;">
+          <div class="recipe-form" style="padding:0 20px 40px; overflow-y:auto; flex:1;">
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="recipe-view-name">${escapeHtml(r.name)}</div>
               <button class="icon-btn" data-action="edit-recipe-from-view" aria-label="Edit recipe" title="Edit recipe">${ICONS.pencil}</button>
@@ -1926,13 +1933,13 @@ function renderRecipeEditorOverlay(){
 
   return `
     <div class="picker-overlay" style="align-items:stretch;">
-      <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column;">
-        <div class="header" style="padding:4px 0 12px;">
+      <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column; overflow:hidden; padding:0;">
+        <div class="header" style="padding:16px 20px 12px;">
           <button class="back-btn" data-action="back-from-recipe-editor" aria-label="Back">${ICONS.arrowLeft}</button>
           <div class="header-title" style="color:#7B5EA7">${isNew ? "New Recipe" : "Edit Recipe"}</div>
           <div style="width:36px"></div>
         </div>
-        <div class="recipe-form" style="padding:0; overflow-y:auto; flex:1;">
+        <div class="recipe-form" style="padding:0 20px 40px; overflow-y:auto; flex:1;">
           ${modeTabsHtml}
           ${showUrlMode ? urlModeHtml : manualModeHtml}
         </div>
@@ -2072,13 +2079,13 @@ function renderDayOverlay(){
     const isNew = state.eventDraftId === "new";
     return `
       <div class="picker-overlay" style="align-items:stretch;">
-        <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column;">
-          <div class="header" style="padding:4px 0 12px;">
+        <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column; overflow:hidden; padding:0;">
+          <div class="header" style="padding:16px 20px 12px;">
             <button class="back-btn" data-action="cancel-event-form" aria-label="Back">${ICONS.arrowLeft}</button>
             <div class="header-title" style="color:#1F8A8C">${isNew ? "New Event" : "Edit Event"}</div>
             <div style="width:36px"></div>
           </div>
-          <div class="recipe-form" style="padding:0; overflow-y:auto; flex:1;">
+          <div class="recipe-form" style="padding:0 20px 40px; overflow-y:auto; flex:1;">
             <div style="font-size:13px; color:var(--muted); font-weight:700;">${niceDate}</div>
 
             <div class="form-label" style="margin-top:14px;">Event name</div>
@@ -2136,8 +2143,8 @@ function renderDayOverlay(){
 
   return `
     <div class="picker-overlay" style="align-items:stretch;">
-      <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column;">
-        <div class="header" style="padding:4px 0 12px;">
+      <div class="picker-sheet" style="border-radius:0; max-height:100vh; height:100%; max-width:480px; margin:0 auto; display:flex; flex-direction:column; overflow:hidden; padding:0;">
+        <div class="header" style="padding:16px 20px 12px;">
           <button class="back-btn" data-action="close-day-overlay" aria-label="Back">${ICONS.arrowLeft}</button>
           <div class="header-title" style="color:#1F8A8C; font-size:17px;">${niceDate}</div>
           <div style="width:36px"></div>
